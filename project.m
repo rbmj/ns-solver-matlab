@@ -81,7 +81,7 @@ for i = 1:IL
 end
 
 %% Initialize the Problem
-delta_t = 1/60;
+delta_t = 1/6000;
 t_final = 10;
 c_amb = sqrt(gamma*R*T_amb);
 RHO = 1;
@@ -89,11 +89,16 @@ M = 2;
 N = 3;
 E = 4;
 
+rho_amb = P_amb / (R*T_amb);
+
 U = zeros(4, IL, JL);
 P = ones(IL, JL) .* P_amb;
 T = ones(IL, JL) .* T_amb;
-U(1,:,:) = P_amb / (R*T_amb);
-U(4,:,:) = P_amb / (gamma - 1);
+U(1,:,:) = rho_amb;
+U(2,:,:) = rho_amb*M_inf*c_amb;
+U(3,:,:) = 0;
+U(3,:,:) = rho_amb*Y_xi*M_inf*c_amb;
+U(4,:,:) = P_amb / (gamma - 1) + 0.5 * rho_amb * (M_inf * c_amb)^2;
 U_xi = zeros(4, IL, JL);
 U_eta = zeros(4, IL, JL);
 T_xi = zeros(IL, JL);
@@ -151,6 +156,17 @@ while t < t_final
         U(N,1,j) = 0;
         U(E,1,j) = P(1,j)/(gamma - 1) + U(M,1,j)^2 / (2*U(RHO,1,j));
     end
+    if any(U(RHO,:,:) <= 0, 'all')
+        [ii,jj] = find(squeeze(U(RHO,:,:)) <= 0, 1);
+        error("Negative density at t=%g, i=%d, j=%d, P=%g, rho=%g, e=%g", ...
+            t, ii, jj, P(ii,jj), U(RHO,ii,jj), U(E,ii,jj));
+    end
+    
+    if any(P <= 0, "all")
+        [ii,jj] = find(P <= 0, 1);
+        error("Negative pressure at t=%g, i=%d, j=%d, P=%g, rho=%g, e=%g", ...
+            t, ii, jj, P(ii,jj), U(RHO,ii,jj), U(E,ii,jj));
+    end
     % Outflow
     for j=1:JL
         T(end,j) = 2*T(end-1,j) - T(end-2,j);
@@ -182,7 +198,7 @@ while t < t_final
     end
     % Output Current Timestep
     fname = sprintf('out/ns_%05i.png', counter);
-    s = pcolor(X, Y, T, EdgeColor='none');
+    s = pcolor(X, Y, P, EdgeColor='none');
     c = colorbar();
     c.Label.String = 'Pressure (Pa)';
     xlim([0 6]);
@@ -207,16 +223,16 @@ while t < t_final
 
     T_x = @(i,j) T_xi(i,j)*Xi_x(i,j) + T_eta(i,j)*Eta_x(i,j);
     T_y = @(i,j) T_xi(i,j)*Xi_y(i,j) + T_eta(i,j)*Eta_y(i,j);
-    e_x = @(i,j) e_xi(i,j)*Xi_x(i,j) + e_eta(i,j)*Eta_x(i,j);
-    e_y = @(i,j) e_xi(i,j)*Xi_y(i,j) + e_eta(i,j)*Eta_y(i,j);
    
     % Calculate the A/B Matrices
     for i=1:IL
         for j=1:JL
             A(:,:,i,j) = calcA(P(i,j), U(E,i,j), gamma, U(M,i,j), U(N,i,j), U(RHO,i,j));
             B(:,:,i,j) = calcB(P(i,j), U(E,i,j), gamma, U(M,i,j), U(N,i,j), U(RHO,i,j));
-            specrad_A(i,j) = sqrt((U(M,i,j)^2 + gamma*U(RHO,i,j)*P(i,j))/U(RHO,i,j)^2);
-            specrad_B(i,j) = sqrt((U(N,i,j)^2 + gamma*U(RHO,i,j)*P(i,j))/U(RHO,i,j)^2);
+            specrad_A(i,j) = abs(U(M,i,j)/U(RHO,i,j)) + ...
+                sqrt(gamma*P(i,j)/U(RHO,i,j));
+            specrad_B(i,j) = abs(U(N,i,j)/U(RHO,i,j)) + ...
+                sqrt(gamma*P(i,j)/U(RHO,i,j));
             Av(:,:,i,j) = dFv_dU(R, U(E,i,j), U_eta(E,i,j), U_xi(E,i,j), ...
                 Eta_x(i,j), Eta_y(i,j), gamma, k, U(M,i,j), ...
                 U_eta(M,i,j), U_xi(M,i,j), mu, U(N,i,j), U_eta(N,i,j), ...
@@ -307,7 +323,7 @@ while t < t_final
                 + Eta_y(i,j+1)*J(i,j+1)*Bv_xi(:,:,i,j+1)*DeltaJU_xi(:,i,j+1) ...
                 - Eta_y(i,j-1)*J(i,j-1)*Bv_xi(:,:,i,j-1)*DeltaJU_xi(:,i,j-1) ...
             )/(4*deltaEta);
-            % Finally... multiply by delta t
+            % Finally... multiply by -delta t (negative to move to RHS)
             RHS(:,i,j) = RHS(:,i,j) * -delta_t;
         end
     end
@@ -318,7 +334,7 @@ while t < t_final
     % Solve across the eta direction
     for i=2:IL-1
         for j=2:JL-1
-            YY(:,j) = RHS(:,i,j)*(-2/delta_t);
+            YY(:,j) = RHS(:,i,j)*(2/delta_t);
             UP(:,:,j-1) = ( ...
                 Eta_x(i,j-1)*(A(:,:,i,j-1) + eye(4)*specrad_A(i,j-1)) ...
                 + Eta_y(i,j-1)*(B(:,:,i,j-1) + eye(4)*specrad_B(i,j-1)) ...
@@ -357,7 +373,7 @@ while t < t_final
                 + Av(:,:,i,j+1)*Eta_x(i,j+1) ...
                 + Bv(:,:,i,j+1)*Eta_y(i,j+1) ...
             )/(2*deltaEta);
-            MD(:,:,j) = MD(:,:,j) - eye(4)*2/delta_t;
+            MD(:,:,j) = MD(:,:,j) + eye(4)*2/delta_t;
         end
         % Wall Boundary Conditions
         MD(:,:,1) = [
@@ -398,7 +414,7 @@ while t < t_final
     YY = zeros(4,IL);
     for j=2:JL-1
         for i=2:IL-1
-            YY(:,i) = DeltaJU(:,i,j)*(-2/delta_t);
+            YY(:,i) = DeltaJU(:,i,j)*(2/delta_t);
             UP(:,:,i-1) = ( ...
                 Xi_x(i-1,j)*(A(:,:,i-1,j) + eye(4)*specrad_A(i-1,j)) ...
                 + Xi_y(i-1,j)*(B(:,:,i-1,j) + eye(4)*specrad_B(i-1,j)) ...
@@ -437,7 +453,7 @@ while t < t_final
                 + Av(:,:,i+1,j)*Xi_x(i+1,j) ...
                 + Bv(:,:,i+1,j)*Xi_y(i+1,j) ...
             )/(2*deltaXi);
-            MD(:,:,i) = MD(:,:,i) - eye(4)*2/delta_t;
+            MD(:,:,i) = MD(:,:,i) + eye(4)*2/delta_t;
         end
         % Inflow Boundary Conditions
         MD(:,:,1) = [
