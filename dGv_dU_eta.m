@@ -1,0 +1,20 @@
+function dGv_dU_eta = dGv_dU_eta(R, e, eta_x, eta_y, gamma, k, m, mu, n, rho)
+  x0 = eta_x.*n;
+  x1 = eta_y.*m;
+  x2 = x0 + x1;
+  x3 = rho.^(-2);
+  x4 = mu.*x3;
+  x5 = 1./rho;
+  x6 = mu.*x5;
+  x7 = eta_y.*x6;
+  x8 = eta_x.*x6;
+  x9 = eta_x.*m;
+  x10 = -2*eta_y.*n + x9;
+  x11 = 1./R;
+  x12 = k.*(gamma - 1);
+  x13 = eta_y.*x12;
+  x14 = R.*mu/3;
+  x15 = x11.*x3;
+  x16 = eta_y.*n;
+  dGv_dU_eta = [0 0 0 0; -x2.*x4 x7 x8 0; 2*x10.*x4/3 -2*x8/3 4*x7/3 0; x11.*(x13.*(-e.*rho + m.^2 + n.^2) + x14.*(-3*m.*x2 + 2*n.*x10))./rho.^3 x15.*(-x1.*x12 + x14.*(3*eta_y.*m - 2*x0)) x15.*(-x12.*x16 + x14.*(4*x16 + 3*x9)) x11.*x13.*x5];
+end

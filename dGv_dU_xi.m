@@ -1,0 +1,20 @@
+function dGv_dU_xi = dGv_dU_xi(R, e, gamma, k, m, mu, n, rho, xi_x, xi_y)
+  x0 = m.*xi_y;
+  x1 = n.*xi_x;
+  x2 = x0 + x1;
+  x3 = rho.^(-2);
+  x4 = mu.*x3;
+  x5 = 1./rho;
+  x6 = mu.*x5;
+  x7 = x6.*xi_y;
+  x8 = x6.*xi_x;
+  x9 = m.*xi_x;
+  x10 = -2*n.*xi_y + x9;
+  x11 = 1./R;
+  x12 = k.*(gamma - 1);
+  x13 = x12.*xi_y;
+  x14 = R.*mu/3;
+  x15 = x11.*x3;
+  x16 = n.*xi_y;
+  dGv_dU_xi = [0 0 0 0; -x2.*x4 x7 x8 0; 2*x10.*x4/3 -2*x8/3 4*x7/3 0; x11.*(x13.*(-e.*rho + m.^2 + n.^2) + x14.*(-3*m.*x2 + 2*n.*x10))./rho.^3 x15.*(-x0.*x12 + x14.*(3*x0 - 2*x1)) x15.*(-x12.*x16 + x14.*(4*x16 + 3*x9)) x11.*x13.*x5];
+end
